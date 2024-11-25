@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from einops import rearrange
 
 import time
 
@@ -285,6 +286,7 @@ class Trainer:
         diffusion: DiffusionModel,
         obs_size: int,
         act_size: int,
+        num_train_objects: int,
         save_every: int = 10_000,
         eval_every: int = 5000,
     ) -> None:
@@ -298,6 +300,7 @@ class Trainer:
 
         self.obs_size = obs_size
         self.act_size = act_size
+        self.num_train_objects = num_train_objects
 
         # configurations
         self.device = device
@@ -305,9 +308,66 @@ class Trainer:
         if self.eval_every <= 0:
             print("eval_every is set to <= 0. Models will not be saved!!")
 
+    def prepare_batch(self, obs_dict, action_dict):
+        """
+        Prepares the batch for training the diffusion model.
+
+        Args:
+            - obs_dict (dict): dictionary containing the observations
+                - proprio (torch.Tensor): shape: (batch_size, timestep, obs_size)
+                - objects (torch.Tensor): shape: (batch_size, timestep, num_objects, obs_size)
+                - mask (torch.Tensor): shape: (batch_size, timestep, 2)
+            - action_dict (dict): dictionary containing the actions
+                - actions (torch.Tensor): shape: (batch_size, timestep - 1, act_size)
+                - mask (torch.Tensor): shape: (batch_size, timestep - 1)
+                
+        Returns:
+            - batch (torch.Tensor): shape: (batch_size, obs_size + act_size)
+        """
+        proprio = obs_dict["proprio"].to(self.device)
+        objects = obs_dict["objects"].to(self.device)
+
+        # Remove the terminal observation information, as the actions are only for the first N-1 steps
+        # proprio = proprio[:, :-1]
+        # objects = objects[:, :-1]
+
+        actions = action_dict["action"].to(self.device)
+        act_mask = action_dict["mask"].to(self.device)
+
+        # Convert actions while taking into account the mask
+        batched_actions = rearrange(actions, "b t a -> (b t) a")
+        batched_act_mask = rearrange(act_mask, "b t -> (b t)")
+
+        # Filter out the actions that are masked
+        batched_actions = batched_actions[batched_act_mask > 0]
+
+        batched_proprio = rearrange(proprio, "b t o -> (b t) o")
+
+        # Filter out the proprio that are masked
+        batched_proprio = batched_proprio[batched_act_mask > 0]
+
+        concatenated_tensors = [batched_proprio]
+        if self.num_train_objects > 0:
+            # if self.num_train_objects == 2:
+            #     object_positions = objects[:, :, 0, :]
+            
+            #     # randomly permute the object positions along the batch dimension
+            #     object_positions = object_positions[torch.randperm(object_positions.size(0))].unsqueeze(2)
+            #     objects = torch.cat([objects, object_positions], dim=2)
+
+            batched_objects = rearrange(objects, "b t o o2 -> (b t) (o o2)")
+            
+            # Filter out the objects that are masked
+            batched_objects = batched_objects[batched_act_mask > 0]
+            concatenated_tensors.append(batched_objects)
+
+        concatenated_tensors.append(batched_actions)
+        # import pdb; pdb.set_trace()
+        return torch.cat(concatenated_tensors, dim=-1)        
+
     def train(
         self,
-        data_iter,
+        data_loader,
         make_eval_env: Optional[Callable],
         num_training_steps=100_000,
         eval_assistance: bool = False,
@@ -315,8 +375,15 @@ class Trainer:
         sample_env = make_eval_env() if make_eval_env is not None else None
 
         losses = []
+        data_iter = iter(data_loader)
         for step in range(num_training_steps):
-            batch = next(data_iter).to(self.device)
+            try:
+                obs_dict, action_dict, _, _ = next(data_iter)
+            except StopIteration:
+                data_iter = iter(data_loader)
+                obs_dict, action_dict, _, _ = next(data_iter)
+
+            batch = self.prepare_batch(obs_dict, action_dict)
             loss = self.diffusion.train_step(batch, step)
 
             if self.save_every > 0 and step % self.save_every == 0:

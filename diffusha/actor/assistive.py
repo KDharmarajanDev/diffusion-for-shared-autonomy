@@ -23,7 +23,7 @@ class DiffusionAssistedActor(Actor):
         self.fwd_diff_ratio = fwd_diff_ratio
 
         # self.obs_size = obs_space.low.size
-        self.act_size = act_space.low.size
+        # self.act_size = act_space.low.size
 
         assert 0 <= fwd_diff_ratio <= 1
         self._k = int((self.diffusion.num_diffusion_steps - 1) * self.fwd_diff_ratio)
@@ -32,8 +32,8 @@ class DiffusionAssistedActor(Actor):
     def _diffusion_cond_sample(self, obs, user_act, run_in_batch=False):
         """Conditional sampling"""
 
-        if user_act is None:
-            user_act = torch.randn((self.act_size,))
+        assert user_act is not None
+            # user_act = torch.randn((self.act_size,))
 
         # HACK
         if not run_in_batch:
