@@ -18,6 +18,9 @@ from .models import ConditionalModel, EMA
 from diffusha.config.default_args import Args
 import wandb
 
+# From brand-stanford
+from utils.dataset_utils import denormalize_fn
+
 
 class DiffusionCore:
     def __init__(self) -> None:
@@ -81,6 +84,8 @@ class DiffusionCore:
             # If we do not remove the noise, the model needs to predict noises for the conditional dimensions as well.
             # This may sound nonsense, but this could encourage the model to learn distribution of the conditional dimensions.
             # Also, effectively the support of input distribution enlarges (i.e., individual data sample + noise)
+
+            #TODO(kdharmarajan): UNDO THIS LATER!!
             # e[
             #     ..., :cond_dim
             # ] = 0.0  # BUG: This was not specified on the original version
@@ -341,28 +346,25 @@ class Trainer:
         # Filter out the actions that are masked
         batched_actions = batched_actions[batched_act_mask > 0]
 
+        # Newly collected actions are now normalized, but it may be hard to learn
+        # with diffusha
+        batched_actions = denormalize_fn(batched_actions)
+
         batched_proprio = rearrange(proprio, "b t o -> (b t) o")
 
         # Filter out the proprio that are masked
         batched_proprio = batched_proprio[batched_act_mask > 0]
 
-        concatenated_tensors = [batched_proprio]
-        if self.num_train_objects > 0:
-            # if self.num_train_objects == 2:
-            #     object_positions = objects[:, :, 0, :]
-            
-            #     # randomly permute the object positions along the batch dimension
-            #     object_positions = object_positions[torch.randperm(object_positions.size(0))].unsqueeze(2)
-            #     objects = torch.cat([objects, object_positions], dim=2)
+        batched_objects = rearrange(objects, "b t o o2 -> (b t) (o o2)")
+        
+        # Filter out the objects that are masked
+        batched_objects = batched_objects[batched_act_mask > 0]
 
-            batched_objects = rearrange(objects, "b t o o2 -> (b t) (o o2)")
-            
-            # Filter out the objects that are masked
-            batched_objects = batched_objects[batched_act_mask > 0]
-            concatenated_tensors.append(batched_objects)
-
-        concatenated_tensors.append(batched_actions)
-        # import pdb; pdb.set_trace()
+        proprio_before_objects = True
+        if not proprio_before_objects:
+            concatenated_tensors = [batched_objects, batched_proprio, batched_actions]
+        else:
+            concatenated_tensors = [batched_proprio, batched_objects, batched_actions]
         return torch.cat(concatenated_tensors, dim=-1)        
 
     def train(

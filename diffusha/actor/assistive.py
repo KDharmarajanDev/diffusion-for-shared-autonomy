@@ -41,7 +41,6 @@ class DiffusionAssistedActor(Actor):
         else:
             obs_size = obs.shape[1]
 
-        # import pdb; pdb.set_trace()
 
         # Concat obs and user action
         if torch.is_tensor(obs):

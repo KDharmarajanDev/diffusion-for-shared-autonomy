@@ -12,7 +12,7 @@ class Args(ParamsProto):
     beta_min = 1e-4
     beta_max = 0.26
     beta_schedule = 'sigmoid'
-    ddpm_model_path = '/scr/karthikd/Documents/Research/dexhand_dev/models/diffusha'
+    ddpm_model_path = '/scr/karthikd/Documents/Research/dexhand_dev/models/diffusha_single_target_denorm'
 
     num_training_steps = 100_000
     eval_every = 2000
