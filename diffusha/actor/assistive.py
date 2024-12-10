@@ -34,7 +34,6 @@ class DiffusionAssistedActor(Actor):
 
         assert user_act is not None
             # user_act = torch.randn((self.act_size,))
-
         # HACK
         if not run_in_batch:
             obs_size = obs.size
@@ -48,6 +47,8 @@ class DiffusionAssistedActor(Actor):
         else:
             # Luzhe: TEMP!
             # This if else condition is specific for play.py I am not sure whether this would cause a problem for eval
+            if torch.is_tensor(user_act):
+                user_act = user_act.cpu().numpy()
             state = torch.as_tensor(np.concatenate((obs, user_act), axis=0))
 
         # NOTE: Currently only support hard conditioning (replacing a part of the input / output)

@@ -40,7 +40,6 @@ class DiffusionCore:
             :batch_size
         ].long()
         t = t.to(diffusion.device)
-
         x_t, e = self.diffuse(diffusion, x_0, t, cond_dim=cond_dim)
 
         output = diffusion.model(x_t, t)
@@ -305,7 +304,6 @@ class Trainer:
 
         self.obs_size = obs_size
         self.act_size = act_size
-        self.num_train_objects = num_train_objects
 
         # configurations
         self.device = device
@@ -348,7 +346,7 @@ class Trainer:
 
         # Newly collected actions are now normalized, but it may be hard to learn
         # with diffusha
-        batched_actions = denormalize_fn(batched_actions)
+        # batched_actions = denormalize_fn(batched_actions)
 
         batched_proprio = rearrange(proprio, "b t o -> (b t) o")
 
@@ -360,12 +358,10 @@ class Trainer:
         # Filter out the objects that are masked
         batched_objects = batched_objects[batched_act_mask > 0]
 
-        proprio_before_objects = True
-        if not proprio_before_objects:
-            concatenated_tensors = [batched_objects, batched_proprio, batched_actions]
-        else:
-            concatenated_tensors = [batched_proprio, batched_objects, batched_actions]
-        return torch.cat(concatenated_tensors, dim=-1)        
+        concatenated_tensors = [batched_proprio, batched_objects, batched_actions]
+        concatenated_tensors = torch.cat(concatenated_tensors, dim=-1)
+        assert concatenated_tensors.shape[-1] == self.obs_size + self.act_size 
+        return concatenated_tensors        
 
     def train(
         self,
